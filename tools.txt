@@ -1,0 +1,30 @@
+Main profile (id: "main") — full toolset
+Content creation
+
+generate-image — Generate image(s) from text onto canvas (Nano Banana, WAN2.7, GPT-Image-2; aspect ratio/resolution options)
+generate-video — Generate video with reference media (Seedance: image/video; Kling: image)
+generate-slide — Generate a single slide as self-contained HTML, save, place on canvas
+"用视觉文本样式"或"visual-text"
+
+generate-article — Generate an article as Markdown, save, place on canvas
+Reading / inspection
+
+read-file — Read attached PDFs/markdown into the conversation (PDFs → per-page text + images)
+read-image — Visually inspect attached images (crop/rotate modifiers)
+Web
+
+web-search — Fast web search with grounded summaries + sources
+read-page — Read a specific webpage's full content
+search-image — Web image search (by text or reverse image)
+map-enumerate-nearby — Read-only Amap Web Service lookup that geocodes a specific address and enumerates dining POIs with pagination, adaptive spatial splitting, and cursor pages for large ledgers; requires AMAP_WEB_SERVICE_KEY
+Memory / skills / planning
+
+create-skill — Author/update personal reusable skills
+update_user_memory — Persist durable user facts across canvases
+update_canvas_memory — Persist durable canvas/project facts
+ask_question — Ask the user 1–4 single/multi/free-text questions
+calculate — Deterministic math via mathjs
+Auto-injected (main profile only)
+
+skill, skill_search, skill_read — Run/search/read the user's saved skills (only when a skills workspace resolves)
+task_write, task_update, task_complete, task_check — Task-list signals (present via TaskSignalProvider; instruction-gated to main profile)

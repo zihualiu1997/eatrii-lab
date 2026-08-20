@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "eatrii-amap": {
+      "cwd": ".",
+      "command": "node",
+      "args": [
+        "./mcp/server.mjs"
+      ],
+      "env_vars": [
+        "AMAP_WEB_SERVICE_KEY"
+      ],
+      "tool_timeout_sec": 180
+    }
+  }
+}

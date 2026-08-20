@@ -1,0 +1,13 @@
+{
+  "name": "eatrii-lab",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "check:mcp": "node --check mcp/amap-nearby.mjs && node --check mcp/result-pages.mjs && node --check mcp/server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

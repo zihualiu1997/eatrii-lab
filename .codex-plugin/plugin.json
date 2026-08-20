@@ -1,0 +1,38 @@
+{
+  "name": "eatrii-lab",
+  "version": "0.2.0+codex.20260820121821",
+  "description": "High-recall nearby dining decisions with an embedded Amap POI enumerator.",
+  "author": {
+    "name": "zihualiu1997",
+    "url": "https://github.com/zihualiu1997"
+  },
+  "homepage": "https://github.com/zihualiu1997/eatrii-lab",
+  "repository": "https://github.com/zihualiu1997/eatrii-lab",
+  "keywords": [
+    "food",
+    "restaurant",
+    "amap",
+    "poi",
+    "dining"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "\u57c3\u5403\u5565 / Eatrii Lab",
+    "shortDescription": "\u7528\u9ad8\u5fb7 POI \u5c3d\u91cf\u627e\u5168\u9644\u8fd1\u95e8\u5e97\uff0c\u518d\u81ea\u7136\u9009\u597d\u8fd9\u987f\u996d",
+    "longDescription": "\u5148\u7528\u9ad8\u5fb7 POI \u5206\u9875\u4e0e\u81ea\u9002\u5e94\u7f51\u683c\u5efa\u7acb\u5e73\u94fa\u5019\u9009\u6c60\uff0c\u518d\u7528\u7f51\u9875\u8865\u6f0f\u5e76\u6309\u5230\u5e97\u3001\u5916\u5356\u6216\u5546\u52a1\u5bb4\u8bf7\u573a\u666f\u7b5b\u9009\u3002",
+    "developerName": "zihualiu1997",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Interactive"
+    ],
+    "websiteURL": "https://github.com/zihualiu1997/eatrii-lab",
+    "defaultPrompt": [
+      "\u4e2d\u5348\u5403\u5565\uff1f",
+      "\u5e2e\u6211\u627e\u9644\u8fd1\u9002\u5408\u4e94\u4e2a\u4eba\u51fa\u53bb\u5403\u7684\u5e97\u3002",
+      "\u5e2e\u6211\u9009\u4e00\u5bb6\u9002\u5408\u8bf7\u5ba2\u6237\u5403\u996d\u7684\u9910\u5385\u3002"
+    ],
+    "brandColor": "#F97316"
+  }
+}
