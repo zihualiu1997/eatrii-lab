@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "timezone": "Asia/Shanghai",
+  "review_policy": {
+    "maximum_review_age_days": 90,
+    "stale_behavior": "ignore_unless_reverified_live",
+    "same_day_verification_required_for_price_or_ranking": true,
+    "dynamic_results_are_never_persisted": true
+  },
+  "brands": [
+    {
+      "id": "kfc",
+      "name": "肯德基",
+      "aliases": ["KFC", "肯德基宅急送"],
+      "categories": ["餐饮", "咖啡", "下午茶"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.kfc.com.cn/" },
+        { "kind": "app", "url": "https://apps.apple.com/cn/app/id587238847" }
+      ],
+      "news_queries": ["site:kfc.com.cn 肯德基 新品 活动", "肯德基官方APP 新品 活动"]
+    },
+    {
+      "id": "mcdonalds",
+      "name": "麦当劳 / McCafé",
+      "aliases": ["麦当劳", "McDonald's", "麦门", "McCafé", "麦咖啡"],
+      "categories": ["餐饮", "咖啡", "下午茶"],
+      "official_sources": [
+        { "kind": "news", "url": "https://www.mcdonalds.com.cn/news/news_list" },
+        { "kind": "benefits", "url": "https://www.mcdonalds.com.cn/page/latest-benefits" }
+      ],
+      "news_queries": ["site:mcdonalds.com.cn/news 麦当劳 新品", "site:mcdonalds.com.cn/news McCafé 新品"]
+    },
+    {
+      "id": "dominos",
+      "name": "达美乐",
+      "aliases": ["达美乐比萨", "Domino's", "Dominos"],
+      "categories": ["餐饮"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.dominos.com.cn/" },
+        { "kind": "membership", "url": "https://www.dominos.com.cn/member/currentperiod" }
+      ],
+      "news_queries": ["site:dominos.com.cn 达美乐 优惠 活动", "达美乐中国 官方 新品"]
+    },
+    {
+      "id": "pizza-hut",
+      "name": "必胜客",
+      "aliases": ["Pizza Hut", "必胜客中国"],
+      "categories": ["餐饮", "下午茶"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.pizzahut.com.cn/" }
+      ],
+      "news_queries": ["site:pizzahut.com.cn 必胜客 新品 活动"]
+    },
+    {
+      "id": "starbucks",
+      "name": "星巴克",
+      "aliases": ["Starbucks", "星享俱乐部"],
+      "categories": ["咖啡", "茶饮", "下午茶"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.starbucks.com.cn/" },
+        { "kind": "membership", "url": "https://www.starbucks.com.cn/account/starbucks-rewards/" }
+      ],
+      "news_queries": ["site:starbucks.com.cn 星巴克 新品 中国"]
+    },
+    {
+      "id": "luckin",
+      "name": "瑞幸咖啡",
+      "aliases": ["瑞幸", "Luckin Coffee", "luckin"],
+      "categories": ["咖啡", "茶饮"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.luckincoffee.com/" },
+        { "kind": "investor_news", "url": "https://investor.lkcoffee.com/" }
+      ],
+      "news_queries": ["瑞幸咖啡 官方 新品", "site:investor.lkcoffee.com 瑞幸 新品"]
+    },
+    {
+      "id": "manner",
+      "name": "MANNER",
+      "aliases": ["MANNER COFFEE", "Manner Coffee"],
+      "categories": ["咖啡"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.wearemanner.com/" }
+      ],
+      "news_queries": ["site:wearemanner.com MANNER 新品 活动"]
+    },
+    {
+      "id": "cotti",
+      "name": "库迪咖啡",
+      "aliases": ["库迪", "Cotti Coffee", "COTTI"],
+      "categories": ["咖啡", "茶饮"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.cotti.com/" }
+      ],
+      "news_queries": ["site:cotti.com 库迪咖啡 新品", "库迪咖啡 官方 新品"]
+    },
+    {
+      "id": "heytea",
+      "name": "喜茶",
+      "aliases": ["HEYTEA", "喜茶GO"],
+      "categories": ["奶茶", "茶饮", "果茶"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.heytea.com/" }
+      ],
+      "news_queries": ["site:heytea.com 喜茶 新品", "喜茶官方 新品"]
+    },
+    {
+      "id": "naixue",
+      "name": "奈雪的茶",
+      "aliases": ["奈雪", "Naixue", "Nayuki"],
+      "categories": ["奶茶", "茶饮", "果茶", "下午茶"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.naixue.com/" }
+      ],
+      "news_queries": ["site:naixue.com 奈雪 新品", "奈雪的茶 官方 新品"]
+    },
+    {
+      "id": "chagee",
+      "name": "霸王茶姬",
+      "aliases": ["CHAGEE", "霸王茶姬小程序"],
+      "categories": ["奶茶", "茶饮"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.chagee.com/" }
+      ],
+      "news_queries": ["site:chagee.com 霸王茶姬 新品", "霸王茶姬 官方 新品"]
+    },
+    {
+      "id": "mixue",
+      "name": "蜜雪冰城",
+      "aliases": ["蜜雪", "MIXUE", "雪王"],
+      "categories": ["奶茶", "茶饮", "果茶", "冰品"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.mxbc.com/" }
+      ],
+      "news_queries": ["site:mxbc.com 蜜雪冰城 新品", "蜜雪冰城 官方 新品"]
+    }
+  ],
+  "signals": [
+    {
+      "id": "kfc-crazy-thursday",
+      "brand_id": "kfc",
+      "campaign_name": "疯狂星期四",
+      "kind": "recurring_campaign",
+      "recurrence": { "frequency": "weekly", "by_weekday": ["TH"] },
+      "timezone": "Asia/Shanghai",
+      "scope": { "market": "中国大陆", "store_specific": true },
+      "channels": ["dine_in", "pickup", "brand_delivery"],
+      "eligibility": "具体参与门店、渠道与商品以当天肯德基官方点单页为准。",
+      "exceptions": [
+        { "kind": "brand_schedule_override", "effect": "must_verify_same_day" }
+      ],
+      "source_urls": [
+        "https://apps.apple.com/cn/app/id587238847",
+        "https://news.qq.com/rain/a/20260220A03NJ700"
+      ],
+      "last_reviewed_at": "2026-08-21",
+      "review_due_at": "2026-11-19",
+      "status": "lead_only"
+    },
+    {
+      "id": "mcdonalds-monday-savings",
+      "brand_id": "mcdonalds",
+      "campaign_name": "周一麦麦省",
+      "kind": "recurring_campaign",
+      "recurrence": { "frequency": "weekly", "by_weekday": ["MO"] },
+      "timezone": "Asia/Shanghai",
+      "scope": { "market": "中国大陆", "store_specific": true },
+      "channels": ["pickup", "brand_delivery"],
+      "eligibility": "麦当劳注册会员通过官方App领券；具体门槛、券内容与适用餐厅以当天领券页为准。",
+      "exceptions": [
+        { "kind": "coupon_or_store_limit", "effect": "must_verify_same_day" }
+      ],
+      "source_urls": [
+        "https://www.mcdonalds.com.cn/page/latest-benefits",
+        "https://www.mcdonalds.com.cn/news/20241229-McDonalds-fans-festival"
+      ],
+      "last_reviewed_at": "2026-08-21",
+      "review_due_at": "2026-11-19",
+      "status": "lead_only"
+    }
+  ]
+}

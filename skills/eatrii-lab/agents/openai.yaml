@@ -1,7 +1,7 @@
 interface:
   display_name: "埃吃啥 / Eatrii Lab"
-  short_description: "先用高德 POI 平铺召回，再按到店、外卖或商务宴请选好这顿饭"
-  default_prompt: "使用 $eatrii-lab；位置未给时先问位置，再从到店、外卖或商务宴请中自然选出这顿吃什么。"
+  short_description: "用高德 POI 找全附近候选，再选好当前一餐或一杯"
+  default_prompt: "使用 $eatrii-lab；位置未给时先问位置，再从到店、外卖、自取或商务宴请中自然选出当前一餐或一杯。"
 
 policy:
   allow_implicit_invocation: true

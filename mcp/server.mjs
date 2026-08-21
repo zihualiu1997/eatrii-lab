@@ -9,7 +9,7 @@ import {
 } from "./result-pages.mjs";
 
 const SERVER_NAME = "Eatrii Amap POI";
-const SERVER_VERSION = "0.2.0";
+const SERVER_VERSION = "0.3.0";
 const TOOL_NAME = "map-enumerate-nearby";
 const SUPPORTED_PROTOCOL_VERSIONS = new Set([
   "2025-11-25",

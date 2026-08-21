@@ -111,6 +111,7 @@ test("MCP server initializes and lists map-enumerate-nearby", async (t) => {
 
   assert.equal(typeof initialized.protocolVersion, "string");
   assert.equal(typeof initialized.serverInfo?.name, "string");
+  assert.equal(initialized.serverInfo?.version, "0.3.0");
 
   session.send({ jsonrpc: "2.0", method: "notifications/initialized", params: {} });
   const listed = await session.request(2, "tools/list");
