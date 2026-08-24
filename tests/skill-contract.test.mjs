@@ -47,6 +47,28 @@ test("brand dynamics and conversation style cannot override base ranking", async
   assert.match(style, /不得改变候选池、候选顺序、价格、来源、置信度或未知状态/);
 });
 
+test("rejected primary becomes guided session-only preference feedback", async () => {
+  const skill = await read("skills/eatrii-lab/SKILL.md");
+  const start = skill.indexOf("### 首选被拒后的引导式重排");
+  const end = skill.indexOf("## 完整示例", start);
+  assert.ok(start >= 0 && end > start);
+
+  const rejection = skill.slice(start, end);
+  assert.match(rejection, /说明了原因[\s\S]*本轮临时约束/);
+  assert.match(rejection, /说明了原因[\s\S]*不追加问题/);
+  assert.match(rejection, /只表达拒绝[\s\S]*两个最可能的具体原因[\s\S]*只问一个二选一问题/);
+  assert.match(rejection, /两个选项必须导向不同的重排动作/);
+  assert.match(rejection, /别问了，你决定[\s\S]*我先按……理解[\s\S]*直接重排/);
+  assert.match(rejection, /都不是[\s\S]*只说一个最不想要的点[\s\S]*不再追问/);
+  assert.match(rejection, /不把单次反馈保存为长期偏好/);
+  assert.match(rejection, /不重新询问这些信息/);
+  assert.match(rejection, /原候选池中重排[\s\S]*只补查受影响的条件/);
+  assert.match(rejection, /普通餐饮从品类、口味、冷热、饱腹感、距离、等待、价格和尝鲜意愿/);
+  assert.match(rejection, /饮品从品类、甜度、温度、咖啡因、品牌和距离/);
+  assert.match(rejection, /商务宴请从环境、私密性、交通、预算和稳定性/);
+  assert.match(rejection, /一个首选＋两个不同大类备选/);
+});
+
 test("tool and MCP surfaces remain unchanged", async () => {
   const tools = await read("tools.txt");
   const mcp = JSON.parse(await read(".mcp.json"));
