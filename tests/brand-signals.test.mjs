@@ -20,6 +20,14 @@ const EXPECTED_BRANDS = new Set([
   "naixue",
   "chagee",
   "mixue",
+  "guming",
+  "chabaidao",
+  "auntea-jenny",
+  "coco",
+  "shuyi",
+  "yihetang",
+  "alittle-tea",
+  "molly-tea",
 ]);
 
 async function loadSignals() {
@@ -64,10 +72,10 @@ function isLeadEligible(signal, now) {
   );
 }
 
-test("brand registry contains the required 12 unique brands with official discovery sources", async () => {
+test("brand registry contains the required 20 unique brands with official discovery sources", async () => {
   const data = await loadSignals();
   assert.equal(data.timezone, "Asia/Shanghai");
-  assert.equal(data.brands.length, 12);
+  assert.equal(data.brands.length, 20);
 
   const ids = data.brands.map((brand) => brand.id);
   assert.equal(new Set(ids).size, ids.length);

@@ -132,6 +132,90 @@
         { "kind": "website", "url": "https://www.mxbc.com/" }
       ],
       "news_queries": ["site:mxbc.com 蜜雪冰城 新品", "蜜雪冰城 官方 新品"]
+    },
+    {
+      "id": "guming",
+      "name": "古茗",
+      "aliases": ["古茗茶饮"],
+      "categories": ["奶茶", "茶饮", "果茶"],
+      "official_sources": [
+        { "kind": "website", "url": "https://gumingnc.com/" }
+      ],
+      "news_queries": ["site:gumingnc.com 古茗 新品", "古茗茶饮 官方 新品"]
+    },
+    {
+      "id": "chabaidao",
+      "name": "茶百道",
+      "aliases": ["ChaPanda", "茶百道ChaPanda"],
+      "categories": ["奶茶", "茶饮", "果茶"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.chabaidao.com/" }
+      ],
+      "news_queries": ["site:chabaidao.com 茶百道 新品", "茶百道ChaPanda 官方 新品"]
+    },
+    {
+      "id": "auntea-jenny",
+      "name": "沪上阿姨",
+      "aliases": ["AUNTEA JENNY", "沪上阿姨鲜果茶"],
+      "categories": ["奶茶", "茶饮", "果茶"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.hsay.com/" }
+      ],
+      "news_queries": ["site:hsay.com 沪上阿姨 新品", "沪上阿姨 官方 新品"]
+    },
+    {
+      "id": "coco",
+      "name": "CoCo都可",
+      "aliases": ["CoCo", "CoCo Fresh Tea & Juice", "都可"],
+      "categories": ["奶茶", "茶饮", "果茶"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.coco-tea.com.cn/" },
+        { "kind": "news", "url": "https://www.coco-tea.com.cn/news.html" }
+      ],
+      "news_queries": ["site:coco-tea.com.cn CoCo都可 新品", "CoCo都可官方 新品"]
+    },
+    {
+      "id": "shuyi",
+      "name": "书亦烧仙草",
+      "aliases": ["书亦", "SHUYI"],
+      "categories": ["奶茶", "茶饮", "果茶"],
+      "official_sources": [
+        { "kind": "website", "url": "https://shuyisxc.com/" },
+        { "kind": "news", "url": "https://shuyisxc.com/home/news/index/id/17.html" }
+      ],
+      "news_queries": ["site:shuyisxc.com 书亦烧仙草 新品", "书亦烧仙草官方 新品"]
+    },
+    {
+      "id": "yihetang",
+      "name": "益禾堂",
+      "aliases": ["益禾烤奶"],
+      "categories": ["奶茶", "茶饮", "果茶"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.yihetang.com/" },
+        { "kind": "news", "url": "https://www.yihetang.com/news_1/1.html" }
+      ],
+      "news_queries": ["site:yihetang.com 益禾堂 新品", "益禾堂官方 新品"]
+    },
+    {
+      "id": "alittle-tea",
+      "name": "1点点",
+      "aliases": ["一点点", "alittleTea", "1点点alittleTea"],
+      "categories": ["奶茶", "茶饮", "果茶"],
+      "official_sources": [
+        { "kind": "website", "url": "https://www.alittle-tea.com/" },
+        { "kind": "news", "url": "https://www.alittle-tea.com/latestnews/" }
+      ],
+      "news_queries": ["site:alittle-tea.com 1点点 新品", "1点点alittleTea 官方 新品"]
+    },
+    {
+      "id": "molly-tea",
+      "name": "茉莉奶白",
+      "aliases": ["MOLLY TEA", "茉莉奶白MOLLY TEA"],
+      "categories": ["奶茶", "茶饮"],
+      "official_sources": [
+        { "kind": "website", "url": "https://cn.mollytea.com/" }
+      ],
+      "news_queries": ["site:cn.mollytea.com 茉莉奶白 新品", "茉莉奶白官方 新品"]
     }
   ],
   "signals": [
