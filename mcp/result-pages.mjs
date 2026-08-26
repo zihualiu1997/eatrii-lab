@@ -138,7 +138,7 @@ export function createResultPager(options = {}) {
   function nextPage(cursor) {
     prune();
     if (typeof cursor !== "string" || cursor.trim().length === 0) {
-      throw new ResultCursorError("INVALID_CURSOR", "cursor 必须是非空字符串。" );
+      throw new ResultCursorError("INVALID_CURSOR", "next_cursor 必须是非空字符串。" );
     }
     const state = cursors.get(cursor);
     const resultSet = state ? resultSets.get(state.resultSetId) : undefined;

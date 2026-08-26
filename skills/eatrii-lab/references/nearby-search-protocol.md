@@ -22,7 +22,7 @@
 
 调用 `map-enumerate-nearby` 后，先把返回的全部 `pois` 写入候选台账，候选池封闭前不推荐、不打分、不按高德返回顺序截断。
 
-- 单次工具响应默认最多交付250家。`delivery.delivery_complete: false` 时必须继续调用同一工具并只传 `next_cursor`，依次合并各页；直到 `delivery_complete: true` 才算候选交付完整。
+- 单次工具响应默认最多交付250家。首次调用使用 `{address, city_hint, scene}`；`delivery.delivery_complete: false` 时必须继续调用同一工具并只传 `{next_cursor: previous.delivery.next_cursor}`，依次合并各页；直到 `delivery_complete: true` 才算候选交付完整。旧 `cursor` 输入暂时兼容但已弃用；地址与游标不得同时出现。续页只读进程内候选池，不得再次地理编码或调用高德。
 - 游标只在插件内存中短暂保留，默认10分钟。游标丢失或过期时重新执行完整枚举，不凭第一页宣布封池。
 - 工具固定枚举高德餐饮大类 `050000`，每页25条、同参数最多8页。
 - 周边查询少于200条时直接闭合；第8页仍满25条时，工具改用矩形 POI 搜索并沿实际米数更长的方向自适应二分。

@@ -8,6 +8,9 @@ const MAX_PAGES = 8;
 const MIN_CELL_SIDE_METERS = 50;
 const MAX_SPLIT_DEPTH = 16;
 const REQUEST_TIMEOUT_MS = 12_000;
+const DEFAULT_POI_SAFE_QPS = 1;
+const MAX_RETRY_DELAY_MS = 5_000;
+const MINUTE_LIMIT_RETRY_AFTER_SECONDS = 60;
 const EARTH_RADIUS_M = 6_371_008.8;
 const BOUNDING_PADDING_M = 5;
 const COVERAGE_NOTE = "高德当前返回范围已闭合，不代表现实中的全部门店。";
@@ -30,15 +33,16 @@ const COARSE_GEOCODE_LEVELS = new Set([
   "道路",
 ]);
 
-const RETRYABLE_INFOCODES = new Set([
-  "10004",
+const QPS_LIMIT_INFOCODES = new Set([
   "10014",
   "10015",
-  "10016",
   "10019",
   "10020",
   "10021",
+  "10029",
 ]);
+const MINUTE_LIMIT_INFOCODES = new Set(["10004"]);
+const PROVIDER_BUSY_INFOCODES = new Set(["10016"]);
 const QUOTA_INFOCODES = new Set(["10003", "10044"]);
 const CONFIG_INFOCODES = new Set([
   "10001",
@@ -56,7 +60,6 @@ const CONFIG_INFOCODES = new Set([
   "10018",
   "10024",
   "10026",
-  "10029",
   "10030",
   "10031",
   "10032",
@@ -168,14 +171,105 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function numericEnvironmentValue(value, field, { minimum, allowZero = false }) {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  const number = Number(value);
+  const valid = Number.isFinite(number) && (allowZero ? number >= 0 : number >= minimum);
+  if (!valid) {
+    throw new AmapToolError(
+      "INVALID_CONFIGURATION",
+      `${field} 必须是${allowZero ? "非负" : `不小于 ${minimum} 的`}数字。`,
+      { field, coverage_status: "provider_unavailable" },
+    );
+  }
+  return number;
+}
+
+function resolvePoiMinIntervalMs(env) {
+  const explicitInterval = numericEnvironmentValue(
+    env?.AMAP_POI_MIN_INTERVAL_MS,
+    "AMAP_POI_MIN_INTERVAL_MS",
+    { minimum: 0, allowZero: true },
+  );
+  if (explicitInterval !== undefined) {
+    return Math.ceil(explicitInterval);
+  }
+  const safeQps = numericEnvironmentValue(
+    env?.AMAP_POI_SAFE_QPS,
+    "AMAP_POI_SAFE_QPS",
+    { minimum: 0.01 },
+  ) ?? DEFAULT_POI_SAFE_QPS;
+  return Math.ceil(1_000 / safeQps);
+}
+
+export function createPoiRateGate(options = {}) {
+  const nowMs = options.nowMs ?? Date.now;
+  const sleepImpl = options.sleepImpl ?? sleep;
+  let tail = Promise.resolve();
+  let nextAllowedAt = 0;
+
+  return {
+    wait(minIntervalMs) {
+      const task = tail.then(async () => {
+        const beforeWait = nowMs();
+        const waitMs = Math.max(0, nextAllowedAt - beforeWait);
+        if (waitMs > 0) {
+          await sleepImpl(waitMs);
+        }
+        const grantedAtMs = Math.max(nowMs(), nextAllowedAt);
+        nextAllowedAt = grantedAtMs + minIntervalMs;
+        return { grantedAtMs, waitMs };
+      });
+      tail = task.catch(() => {});
+      return task;
+    },
+  };
+}
+
+const PROCESS_POI_RATE_GATE = createPoiRateGate();
+
+function retryAfterSeconds(response, nowMs) {
+  const raw = response?.headers?.get?.("retry-after");
+  if (!raw) return undefined;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.ceil(seconds);
+  }
+  const retryAt = Date.parse(raw);
+  if (!Number.isFinite(retryAt)) return undefined;
+  return Math.max(0, Math.ceil((retryAt - nowMs()) / 1_000));
+}
+
+function boundedBackoffMs(attempt, random) {
+  const base = Math.min(MAX_RETRY_DELAY_MS, 500 * 2 ** (attempt - 1));
+  const jitter = Math.floor(Math.max(0, Math.min(1, random())) * Math.min(250, base / 4));
+  return Math.min(MAX_RETRY_DELAY_MS, base + jitter);
+}
+
+async function waitForRetry(state, delayMs) {
+  const resolvedDelay = Math.max(0, Math.ceil(delayMs));
+  state.retryWaitsMs.push(resolvedDelay);
+  await state.sleepImpl(resolvedDelay);
+}
+
+function sanitizedProviderText(value, apiKey) {
+  const text = stringValue(value);
+  return apiKey ? text.replaceAll(apiKey, "[REDACTED]") : text;
+}
+
 function safeErrorDetails(error, coverageStatus = "provider_unavailable") {
   if (error instanceof AmapToolError) {
     return {
       code: error.code,
       message: error.message,
       coverage_status: error.details.coverage_status ?? coverageStatus,
-      endpoint: error.details.endpoint,
-      infocode: error.details.infocode,
+      endpoint: error.details.endpoint ?? null,
+      infocode: error.details.infocode ?? null,
+      info: error.details.info ?? null,
+      attempts: error.details.attempts ?? null,
+      retry_after_seconds: error.details.retry_after_seconds ?? null,
     };
   }
   return {
@@ -201,14 +295,25 @@ function recordRequest(state, requestKind) {
   }
 }
 
+function recordLogicalRequest(state, requestKind) {
+  if (requestKind === "poi") {
+    state.poiLogicalRequests += 1;
+  } else {
+    state.geocodeLogicalRequests += 1;
+  }
+}
+
 function classifyProviderError(infocode) {
   if (QUOTA_INFOCODES.has(infocode)) {
     return "AMAP_DAILY_QUOTA_EXHAUSTED";
   }
+  if (PROVIDER_BUSY_INFOCODES.has(infocode)) {
+    return "AMAP_PROVIDER_BUSY";
+  }
   if (CONFIG_INFOCODES.has(infocode)) {
     return "AMAP_PROVIDER_UNAVAILABLE";
   }
-  if (RETRYABLE_INFOCODES.has(infocode)) {
+  if (MINUTE_LIMIT_INFOCODES.has(infocode) || QPS_LIMIT_INFOCODES.has(infocode)) {
     return "AMAP_RATE_LIMITED";
   }
   return "AMAP_API_ERROR";
@@ -231,6 +336,9 @@ async function fetchAmapJson(
         coverage_status: "partial",
       });
     }
+    if (attempt === 1) {
+      recordLogicalRequest(state, requestKind);
+    }
 
     const url = new URL(endpoint);
     for (const [key, value] of Object.entries(params)) {
@@ -240,6 +348,10 @@ async function fetchAmapJson(
     }
     url.searchParams.set("key", state.apiKey);
 
+    if (requestKind === "poi") {
+      const gate = await state.poiRateGate.wait(state.poiMinIntervalMs);
+      state.poiAttemptStartedAt.push(gate.grantedAtMs);
+    }
     recordRequest(state, requestKind);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -256,10 +368,10 @@ async function fetchAmapJson(
       lastRetryableError = new AmapToolError(
         "AMAP_NETWORK_ERROR",
         `高德${endpointName}请求失败。`,
-        { endpoint: endpointName, coverage_status: "partial" },
+        { endpoint: endpointName, attempts: attempt, coverage_status: "partial" },
       );
       if (attempt < maxAttempts && requestBudgetAvailable(state, requestKind)) {
-        await state.sleepImpl(100 * 2 ** (attempt - 1));
+        await waitForRetry(state, boundedBackoffMs(attempt, state.random));
         continue;
       }
       throw lastRetryableError;
@@ -269,17 +381,30 @@ async function fetchAmapJson(
       clearTimeout(timer);
       const status = Number(response?.status) || 0;
       const retryable = status === 429 || status >= 500;
+      const retryAfter = status === 429 ? retryAfterSeconds(response, state.nowMs) : undefined;
+      const retryDelayMs = retryAfter === undefined
+        ? boundedBackoffMs(attempt, state.random)
+        : retryAfter * 1_000;
       lastRetryableError = new AmapToolError(
         status === 429 ? "AMAP_RATE_LIMITED" : "AMAP_HTTP_ERROR",
         `高德${endpointName}返回 HTTP ${status || "错误"}。`,
-        { endpoint: endpointName, status, coverage_status: "partial" },
+        {
+          endpoint: endpointName,
+          status,
+          attempts: attempt,
+          retry_after_seconds: status === 429
+            ? (retryAfter ?? Math.ceil(retryDelayMs / 1_000))
+            : undefined,
+          coverage_status: "partial",
+        },
       );
       if (
         retryable &&
+        (retryAfter === undefined || retryDelayMs <= 60_000) &&
         attempt < maxAttempts &&
         requestBudgetAvailable(state, requestKind)
       ) {
-        await state.sleepImpl(100 * 2 ** (attempt - 1));
+        await waitForRetry(state, retryDelayMs);
         continue;
       }
       throw lastRetryableError;
@@ -293,29 +418,39 @@ async function fetchAmapJson(
       throw new AmapToolError(
         "AMAP_INVALID_RESPONSE",
         `高德${endpointName}返回了无法解析的数据。`,
-        { endpoint: endpointName, coverage_status: "partial" },
+        { endpoint: endpointName, attempts: attempt, coverage_status: "partial" },
       );
     }
     clearTimeout(timer);
 
     if (String(payload?.status) !== "1") {
       const infocode = stringValue(payload?.infocode);
+      const info = sanitizedProviderText(payload?.info, state.apiKey);
       const code = classifyProviderError(infocode);
+      const retryDelayMs = boundedBackoffMs(attempt, state.random);
+      const retryAfter = MINUTE_LIMIT_INFOCODES.has(infocode)
+        ? MINUTE_LIMIT_RETRY_AFTER_SECONDS
+        : QPS_LIMIT_INFOCODES.has(infocode)
+          ? Math.ceil(retryDelayMs / 1_000)
+          : undefined;
       lastRetryableError = new AmapToolError(
         code,
         `高德${endpointName}返回错误${infocode ? `（${infocode}）` : ""}。`,
         {
           endpoint: endpointName,
           infocode: infocode || undefined,
+          info: info || undefined,
+          attempts: attempt,
+          retry_after_seconds: retryAfter,
           coverage_status: code === "AMAP_PROVIDER_UNAVAILABLE" ? "provider_unavailable" : "partial",
         },
       );
       if (
-        RETRYABLE_INFOCODES.has(infocode) &&
+        QPS_LIMIT_INFOCODES.has(infocode) &&
         attempt < maxAttempts &&
         requestBudgetAvailable(state, requestKind)
       ) {
-        await state.sleepImpl(100 * 2 ** (attempt - 1));
+        await waitForRetry(state, retryDelayMs);
         continue;
       }
       throw lastRetryableError;
@@ -828,6 +963,7 @@ function finalizeResult({
         ? COVERAGE_NOTE
         : "本轮高德枚举尚未闭合，以下仅为已经检索到的候选。",
     partial_reasons: [...new Set(partialReasons)].sort(),
+    provider_errors: state.providerErrors,
     query: {
       address,
       city_hint: cityHint,
@@ -842,6 +978,21 @@ function finalizeResult({
       geocode_requests: state.geocodeRequests,
       poi_requests_used: state.poiRequestsUsed,
       poi_requests_budget: state.poiRequestBudget,
+      request_counts: {
+        geocode: {
+          logical_requests: state.geocodeLogicalRequests,
+          attempts: state.geocodeRequests,
+        },
+        poi: {
+          logical_requests: state.poiLogicalRequests,
+          attempts: state.poiRequestsUsed,
+        },
+      },
+      rate_limit: {
+        configured_min_interval_ms: state.poiMinIntervalMs,
+        minimum_observed_poi_interval_ms: minimumInterval(state.poiAttemptStartedAt),
+        retry_waits_ms: state.retryWaitsMs,
+      },
       around_pages: state.audit.aroundPages,
       polygon_pages: state.audit.polygonPages,
       cells_scanned: state.audit.cellsScanned,
@@ -862,6 +1013,7 @@ function partialReasonForError(error) {
   const mappings = new Map([
     ["REQUEST_BUDGET_EXHAUSTED", "request_budget_exhausted"],
     ["AMAP_RATE_LIMITED", "rate_limited"],
+    ["AMAP_PROVIDER_BUSY", "provider_busy"],
     ["AMAP_DAILY_QUOTA_EXHAUSTED", "daily_quota_exhausted"],
     ["AMAP_NETWORK_ERROR", "cell_request_failed"],
     ["AMAP_HTTP_ERROR", "cell_request_failed"],
@@ -870,6 +1022,21 @@ function partialReasonForError(error) {
     ["AMAP_PROVIDER_INCONSISTENT", "provider_inconsistent"],
   ]);
   return mappings.get(error?.code);
+}
+
+function preserveProviderError(state, error) {
+  if (error instanceof AmapToolError && error.code.startsWith("AMAP_")) {
+    state.providerErrors.push(safeErrorDetails(error, "partial"));
+  }
+}
+
+function minimumInterval(timestamps) {
+  if (timestamps.length < 2) return undefined;
+  let minimum = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < timestamps.length; index += 1) {
+    minimum = Math.min(minimum, timestamps[index] - timestamps[index - 1]);
+  }
+  return Number.isFinite(minimum) ? minimum : undefined;
 }
 
 export async function enumerateNearby(args, options = {}) {
@@ -893,8 +1060,9 @@ export async function enumerateNearby(args, options = {}) {
     256,
     "max_poi_requests",
   );
+  const runtimeEnv = { ...process.env, ...options.env };
   const apiKey = optionalTrimmedString(
-    options.env?.AMAP_WEB_SERVICE_KEY ?? process.env.AMAP_WEB_SERVICE_KEY,
+    runtimeEnv.AMAP_WEB_SERVICE_KEY,
     "AMAP_WEB_SERVICE_KEY",
   );
   if (!apiKey) {
@@ -910,8 +1078,17 @@ export async function enumerateNearby(args, options = {}) {
     fetchImpl: options.fetchImpl ?? globalThis.fetch,
     sleepImpl: options.sleepImpl ?? sleep,
     now: options.now ?? (() => new Date()),
+    nowMs: options.nowMs ?? Date.now,
+    random: options.random ?? Math.random,
+    poiRateGate: options.poiRateGate ?? PROCESS_POI_RATE_GATE,
+    poiMinIntervalMs: resolvePoiMinIntervalMs(runtimeEnv),
     geocodeRequests: 0,
+    geocodeLogicalRequests: 0,
     poiRequestsUsed: 0,
+    poiLogicalRequests: 0,
+    poiAttemptStartedAt: [],
+    retryWaitsMs: [],
+    providerErrors: [],
     poiRequestBudget,
     audit: {
       aroundPages: 0,
@@ -934,6 +1111,7 @@ export async function enumerateNearby(args, options = {}) {
       coverage_status: "location_unresolved",
       coverage_note: "位置尚未唯一解析，未开始检索具体门店。",
       partial_reasons: [resolution.reason],
+      provider_errors: [],
       query: { address, city_hint: cityHint, scene, requested_radius_m: radiusM },
       location_candidates: resolution.candidates,
       provider: "amap",
@@ -943,6 +1121,18 @@ export async function enumerateNearby(args, options = {}) {
         geocode_requests: state.geocodeRequests,
         poi_requests_used: 0,
         poi_requests_budget: poiRequestBudget,
+        request_counts: {
+          geocode: {
+            logical_requests: state.geocodeLogicalRequests,
+            attempts: state.geocodeRequests,
+          },
+          poi: { logical_requests: 0, attempts: 0 },
+        },
+        rate_limit: {
+          configured_min_interval_ms: state.poiMinIntervalMs,
+          minimum_observed_poi_interval_ms: undefined,
+          retry_waits_ms: state.retryWaitsMs,
+        },
       },
       pois: [],
     };
@@ -973,6 +1163,7 @@ export async function enumerateNearby(args, options = {}) {
     if (!reason || error.code === "AMAP_PROVIDER_UNAVAILABLE") {
       throw error;
     }
+    preserveProviderError(state, error);
     partialReasons.push(reason);
     return finalizeResult({
       address,
@@ -1035,6 +1226,7 @@ export async function enumerateNearby(args, options = {}) {
       if (!reason || error.code === "AMAP_PROVIDER_UNAVAILABLE") {
         throw error;
       }
+      preserveProviderError(state, error);
       partialReasons.push(reason);
       unresolvedCells += 1 + queue.length;
       break;

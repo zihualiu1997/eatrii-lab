@@ -156,7 +156,7 @@ metadata:
 获得位置、场景和人数后，完整读取[附近门店高召回搜索协议](references/nearby-search-protocol.md)，按其中的高德枚举、网页补漏和统一候选台账执行。饮料需求还要完整读取[饮料检索与决策协议](references/beverage-protocol.md)，并用其查询矩阵替代正餐七组矩阵。
 
 - 先调用 `map-enumerate-nearby`：普通到店用 `dine_in`，外卖用 `delivery`，普通接待用 `business_casual`，正式宴请用 `business_formal`；同时传入上下文已有的城市。
-- 把高德返回的全部 POI 平铺入池；若 `delivery.delivery_complete` 为 `false`，继续把 `next_cursor` 传给同一工具，直到完整取完或游标明确失败，不能只用第一页封池。
+- 把高德返回的全部 POI 平铺入池。首次调用传 `{address, city_hint, scene}`；若 `delivery.delivery_complete` 为 `false`，续页只传 `{next_cursor: previous.delivery.next_cursor}`，直到完整取完或游标明确失败，不能只用第一页封池。`cursor` 只是暂时兼容的旧字段；不得把地址与游标一起传入。
 - `amap_enumeration_complete` 只表示高德当前空间已闭合；`partial`、位置未解析、候选未完整交付或服务不可用时不得伪装完整。
 - 正餐再使用 `web-search` 完成3个空间锚点 × 7组餐型的21个等额补漏查询；模糊饮料需求执行3个锚点 × 5组的15格矩阵；明确只要咖啡或奶茶执行3个锚点 × 3组的9格矩阵。三种模式都允许最多3次空白餐型/饮料组或已知漏店补查。
 - 地图与网页结果先全部合并：高德记录优先按 POI ID去重，缺少 ID 时才回退到“标准化店名＋分店/地址”；同品牌不同分店必须保留。

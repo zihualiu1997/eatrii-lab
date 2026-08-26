@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  createPoiRateGate,
   enumerateNearby,
   haversineMeters,
   serializeAmapError,
@@ -45,10 +46,10 @@ function poi(id, name, address, location = CENTER, overrides = {}) {
   };
 }
 
-function jsonResponse(payload, status = 200) {
+function jsonResponse(payload, status = 200, headers = {}) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
   });
 }
 
@@ -103,7 +104,8 @@ function createFetch({ geocodePayload, poiHandler }) {
     }
 
     if (url.pathname === "/v5/place/around" || url.pathname === "/v5/place/polygon") {
-      return jsonResponse(await poiHandler(url));
+      const result = await poiHandler(url);
+      return result instanceof Response ? result : jsonResponse(result);
     }
 
     throw new Error(`unexpected endpoint: ${url.pathname}`);
@@ -112,12 +114,19 @@ function createFetch({ geocodePayload, poiHandler }) {
   return { fetchImpl, calls };
 }
 
-function enumerate(args, fetchImpl) {
+function enumerate(args, fetchImpl, options = {}) {
   return enumerateNearby(args, {
     fetchImpl,
-    env: { AMAP_WEB_SERVICE_KEY: TEST_KEY },
+    env: {
+      AMAP_WEB_SERVICE_KEY: TEST_KEY,
+      AMAP_POI_MIN_INTERVAL_MS: "0",
+      ...options.env,
+    },
     now: () => FIXED_NOW,
-    sleepImpl: async () => {},
+    sleepImpl: options.sleepImpl ?? (async () => {}),
+    nowMs: options.nowMs,
+    random: options.random ?? (() => 0),
+    poiRateGate: options.poiRateGate,
   });
 }
 
@@ -236,6 +245,8 @@ test("POI request budget exhaustion is explicit and does not count geocoding", a
   assert.equal(result.coverage_status, "partial");
   assert.match(reasonText(result), /budget/i);
   assert.equal(result.audit.poi_requests_used, 8);
+  assert.deepEqual(result.audit.request_counts.poi, { logical_requests: 8, attempts: 8 });
+  assert.deepEqual(result.provider_errors, []);
   assert.equal(result.pois.length, 200, "already fetched rows must survive a budget stop");
   assert.equal(calls.filter((url) => url.pathname.includes("/place/")).length, 8);
   assert.equal(calls.filter((url) => url.pathname.includes("/geocode/")).length, 1);
@@ -284,6 +295,169 @@ test("POI infocode errors are visible without exposing credentials", async () =>
   assert.notEqual(result.status, "ok");
   assert.match(reasonText(result), /poi|amap|api/i);
   assertSecretAbsent(result);
+});
+
+test("HTTP 429 honors Retry-After before retrying", async () => {
+  const waits = [];
+  let poiAttempts = 0;
+  const { fetchImpl } = createFetch({
+    poiHandler: () => {
+      poiAttempts += 1;
+      if (poiAttempts === 1) {
+        return new Response("", { status: 429, headers: { "retry-after": "3" } });
+      }
+      return apiOk([]);
+    },
+  });
+  const result = await enumerate(
+    { address: "深圳南山云科技大厦" },
+    fetchImpl,
+    { sleepImpl: async (ms) => waits.push(ms) },
+  );
+
+  assert.equal(result.coverage_status, "amap_enumeration_complete");
+  assert.deepEqual(waits, [3_000]);
+  assert.equal(result.audit.poi_requests_used, 2);
+  assert.deepEqual(result.audit.request_counts.poi, { logical_requests: 1, attempts: 2 });
+});
+
+test("Amap limit, busy, and quota infocodes have distinct classifications", async (t) => {
+  const cases = [
+    {
+      infocode: "10004",
+      info: `USER_DAILY_QUERY_OVER_LIMIT ${TEST_KEY}`,
+      expectedInfo: "USER_DAILY_QUERY_OVER_LIMIT [REDACTED]",
+      code: "AMAP_RATE_LIMITED",
+      reason: "rate_limited",
+      attempts: 1,
+      waits: [],
+      retryAfter: 60,
+    },
+    {
+      infocode: "10021",
+      info: "CUQPS_HAS_EXCEEDED_THE_LIMIT",
+      code: "AMAP_RATE_LIMITED",
+      reason: "rate_limited",
+      attempts: 3,
+      waits: [500, 1_000],
+      retryAfter: 2,
+    },
+    {
+      infocode: "10016",
+      info: "SERVER_IS_BUSY",
+      code: "AMAP_PROVIDER_BUSY",
+      reason: "provider_busy",
+      attempts: 1,
+      waits: [],
+      retryAfter: null,
+    },
+    {
+      infocode: "10003",
+      info: "DAILY_QUERY_OVER_LIMIT",
+      code: "AMAP_DAILY_QUOTA_EXHAUSTED",
+      reason: "daily_quota_exhausted",
+      attempts: 1,
+      waits: [],
+      retryAfter: null,
+    },
+  ];
+
+  for (const expected of cases) {
+    await t.test(expected.infocode, async () => {
+      const waits = [];
+      const { fetchImpl } = createFetch({
+        poiHandler: () => ({
+          status: "0",
+          info: expected.info,
+          infocode: expected.infocode,
+          count: "0",
+          pois: [],
+        }),
+      });
+      const result = await enumerate(
+        { address: "深圳南山云科技大厦" },
+        fetchImpl,
+        { sleepImpl: async (ms) => waits.push(ms) },
+      );
+
+      assert.equal(result.coverage_status, "partial");
+      assert.ok(result.partial_reasons.includes(expected.reason));
+      assert.deepEqual(waits, expected.waits);
+      assert.equal(result.audit.poi_requests_used, expected.attempts);
+      assert.deepEqual(result.audit.request_counts.poi, {
+        logical_requests: 1,
+        attempts: expected.attempts,
+      });
+      assert.deepEqual(result.provider_errors, [{
+        code: expected.code,
+        message: `高德周边 POI返回错误（${expected.infocode}）。`,
+        coverage_status: "partial",
+        endpoint: "周边 POI",
+        infocode: expected.infocode,
+        info: expected.expectedInfo ?? expected.info,
+        attempts: expected.attempts,
+        retry_after_seconds: expected.retryAfter,
+      }]);
+      assertSecretAbsent(result);
+    });
+  }
+});
+
+test("successful POI requests honor the configured minimum interval", async () => {
+  let clock = 0;
+  const starts = [];
+  const sleepImpl = async (ms) => { clock += ms; };
+  const rateGate = createPoiRateGate({ nowMs: () => clock, sleepImpl });
+  const fullPage = Array.from({ length: 25 }, (_, index) =>
+    poi(`paced-${index}`, `节奏店${index}`, `节奏地址${index}`),
+  );
+  const { fetchImpl } = createFetch({
+    poiHandler: (url) => url.searchParams.get("page_num") === "1" ? apiOk(fullPage) : apiOk([]),
+  });
+  const observingFetch = async (input, init) => {
+    if (new URL(input).pathname.includes("/place/")) starts.push(clock);
+    return fetchImpl(input, init);
+  };
+
+  const result = await enumerate(
+    { address: "深圳南山云科技大厦" },
+    observingFetch,
+    {
+      env: { AMAP_POI_MIN_INTERVAL_MS: "40" },
+      nowMs: () => clock,
+      sleepImpl,
+      poiRateGate: rateGate,
+    },
+  );
+
+  assert.deepEqual(starts, [0, 40]);
+  assert.equal(result.audit.rate_limit.configured_min_interval_ms, 40);
+  assert.equal(result.audit.rate_limit.minimum_observed_poi_interval_ms, 40);
+});
+
+test("concurrent enumerations share one process-level POI rate gate", async () => {
+  let clock = 0;
+  const starts = [];
+  const sleepImpl = async (ms) => { clock += ms; };
+  const sharedGate = createPoiRateGate({ nowMs: () => clock, sleepImpl });
+  const { fetchImpl } = createFetch({ poiHandler: () => apiOk([]) });
+  const observingFetch = async (input, init) => {
+    if (new URL(input).pathname.includes("/place/")) starts.push(clock);
+    return fetchImpl(input, init);
+  };
+  const options = {
+    env: { AMAP_POI_MIN_INTERVAL_MS: "35" },
+    nowMs: () => clock,
+    sleepImpl,
+    poiRateGate: sharedGate,
+  };
+
+  await Promise.all([
+    enumerate({ address: "深圳南山云科技大厦 A" }, observingFetch, options),
+    enumerate({ address: "深圳南山云科技大厦 B" }, observingFetch, options),
+  ]);
+
+  assert.deepEqual(starts, [0, 35]);
 });
 
 test("a repeated provider page is partial and preserves earlier rows", async () => {

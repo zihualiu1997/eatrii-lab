@@ -1,5 +1,6 @@
 import readline from "node:readline";
 import {
+  AmapToolError,
   enumerateNearby,
   serializeAmapError,
 } from "./amap-nearby.mjs";
@@ -43,6 +44,8 @@ function toolDefinition() {
       "Geocode a specific address with Amap, then enumerate dining POIs inside a radius using pagination and adaptive spatial splitting. Use this as Eatrii's flat discovery layer before web gap searches or recommendation ranking.",
     inputSchema: {
       type: "object",
+      description:
+        "First scan: pass address (plus optional city_hint and scene). Continuation: pass only next_cursor from delivery.next_cursor. The legacy cursor alias is deprecated.",
       properties: {
         address: {
           type: "string",
@@ -82,17 +85,19 @@ function toolDefinition() {
           description:
             "Maximum POIs returned in one tool response. Continue with next_cursor until delivery_complete is true.",
         },
+        next_cursor: {
+          type: "string",
+          minLength: 1,
+          description:
+            "Canonical continuation input. Pass the preceding response's delivery.next_cursor by itself; this reads the next in-memory page without geocoding or calling Amap.",
+        },
         cursor: {
           type: "string",
           minLength: 1,
           description:
-            "Opaque next_cursor from the preceding response. When present, retrieves the next POI page without repeating the Amap scan.",
+            "Deprecated alias for next_cursor. Prefer next_cursor from delivery.next_cursor.",
         },
       },
-      oneOf: [
-        { required: ["address"], not: { required: ["cursor"] } },
-        { required: ["cursor"], not: { required: ["address"] } },
-      ],
       additionalProperties: false,
     },
     annotations: {
@@ -104,6 +109,47 @@ function toolDefinition() {
   };
 }
 
+function resolveInvocation(args) {
+  const hasAddress = Object.hasOwn(args, "address");
+  const hasNextCursor = Object.hasOwn(args, "next_cursor");
+  const hasLegacyCursor = Object.hasOwn(args, "cursor");
+
+  if (hasNextCursor && hasLegacyCursor) {
+    throw new AmapToolError(
+      "INVALID_ARGUMENT",
+      "next_cursor 与已弃用的 cursor 不能同时传入。",
+      { coverage_status: "partial" },
+    );
+  }
+  if (hasAddress && (hasNextCursor || hasLegacyCursor)) {
+    throw new AmapToolError(
+      "INVALID_ARGUMENT",
+      "address 与分页游标不能同时传入；首次扫描只传 address，续页只传 next_cursor。",
+      { coverage_status: "partial" },
+    );
+  }
+
+  const pageCursor = args.next_cursor ?? args.cursor;
+  if (hasNextCursor || hasLegacyCursor) {
+    if (typeof pageCursor !== "string" || pageCursor.trim().length === 0) {
+      throw new AmapToolError(
+        "INVALID_ARGUMENT",
+        "next_cursor 必须是非空字符串。",
+        { coverage_status: "partial" },
+      );
+    }
+    return { mode: "continuation", pageCursor };
+  }
+  if (!hasAddress) {
+    throw new AmapToolError(
+      "INVALID_ARGUMENT",
+      "首次扫描必须传 address；续页必须传 next_cursor（旧 cursor 仍暂时兼容）。",
+      { coverage_status: "partial" },
+    );
+  }
+  return { mode: "first" };
+}
+
 async function handleToolCall(id, params) {
   if (params?.name !== TOOL_NAME) {
     sendError(id, JsonRpcError.INVALID_PARAMS, `Unknown tool: ${params?.name ?? ""}`);
@@ -112,8 +158,9 @@ async function handleToolCall(id, params) {
 
   try {
     const args = params.arguments ?? {};
-    const result = args.cursor
-      ? resultPager.nextPage(args.cursor)
+    const invocation = resolveInvocation(args);
+    const result = invocation.mode === "continuation"
+      ? resultPager.nextPage(invocation.pageCursor)
       : resultPager.firstPage(
           await enumerateNearby(args),
           args.result_page_size,

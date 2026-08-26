@@ -7,7 +7,9 @@
         "./mcp/server.mjs"
       ],
       "env_vars": [
-        "AMAP_WEB_SERVICE_KEY"
+        "AMAP_WEB_SERVICE_KEY",
+        "AMAP_POI_SAFE_QPS",
+        "AMAP_POI_MIN_INTERVAL_MS"
       ],
       "tool_timeout_sec": 180
     }

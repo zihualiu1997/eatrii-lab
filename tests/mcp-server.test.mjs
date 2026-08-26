@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const SERVER_PATH = fileURLToPath(new URL("../mcp/server.mjs", import.meta.url));
+const FETCH_ONCE_FIXTURE = new URL("./fixtures/amap-fetch-once.mjs", import.meta.url).href;
 
 function startServer(t, options = {}) {
   const childEnv = { ...process.env };
@@ -13,7 +14,13 @@ function startServer(t, options = {}) {
   } else {
     childEnv.AMAP_WEB_SERVICE_KEY = amapKey;
   }
-  const child = spawn(process.execPath, [SERVER_PATH], {
+  if (options.minimumIntervalMs !== undefined) {
+    childEnv.AMAP_POI_MIN_INTERVAL_MS = String(options.minimumIntervalMs);
+  }
+  const nodeArgs = options.preloadFixture
+    ? ["--import", options.preloadFixture, SERVER_PATH]
+    : [SERVER_PATH];
+  const child = spawn(process.execPath, nodeArgs, {
     stdio: ["pipe", "pipe", "pipe"],
     env: childEnv,
     windowsHide: true,
@@ -119,14 +126,14 @@ test("MCP server initializes and lists map-enumerate-nearby", async (t) => {
 
   assert.ok(tool, "map-enumerate-nearby was not registered");
   assert.equal(tool.inputSchema?.type, "object");
-  assert.ok(
-    tool.inputSchema?.oneOf?.some((branch) => branch.required?.includes("address")),
-  );
+  assert.equal(tool.inputSchema?.oneOf, undefined);
   assert.ok(tool.inputSchema?.properties?.city_hint);
   assert.ok(tool.inputSchema?.properties?.radius_m);
   assert.ok(tool.inputSchema?.properties?.max_poi_requests);
   assert.ok(tool.inputSchema?.properties?.result_page_size);
+  assert.ok(tool.inputSchema?.properties?.next_cursor);
   assert.ok(tool.inputSchema?.properties?.cursor);
+  assert.match(tool.inputSchema.properties.cursor.description, /deprecated/i);
 });
 
 test("MCP tool reports a missing Amap key without attempting a lookup", async (t) => {
@@ -144,4 +151,80 @@ test("MCP tool reports a missing Amap key without attempting a lookup", async (t
   assert.equal(result.isError, true);
   assert.equal(result.structuredContent?.error?.code, "AMAP_KEY_MISSING");
   assert.equal(result.structuredContent?.coverage_status, "provider_unavailable");
+});
+
+test("MCP next_cursor continuation is paged, idempotent, and does not rescan Amap", async (t) => {
+  const session = startServer(t, {
+    preloadFixture: FETCH_ONCE_FIXTURE,
+    minimumIntervalMs: 0,
+  });
+  await session.request(1, "initialize", {
+    protocolVersion: "2024-11-05",
+    capabilities: {},
+    clientInfo: { name: "eatrii-lab-test", version: "1.0.0" },
+  });
+
+  const first = await session.request(2, "tools/call", {
+    name: "map-enumerate-nearby",
+    arguments: {
+      address: "深圳南山云科技大厦",
+      city_hint: "深圳市",
+      scene: "dine_in",
+      result_page_size: 1,
+    },
+  });
+  const firstPage = first.structuredContent;
+  const nextCursor = firstPage.delivery.next_cursor;
+  assert.equal(first.isError, false);
+  assert.equal(firstPage.delivery.delivery_complete, false);
+  assert.equal(firstPage.pois.length, 1);
+  assert.equal(firstPage.audit.geocode_requests, 1);
+  assert.equal(firstPage.audit.poi_requests_used, 1);
+  assert.equal(typeof nextCursor, "string");
+
+  const second = await session.request(3, "tools/call", {
+    name: "map-enumerate-nearby",
+    arguments: { next_cursor: nextCursor },
+  });
+  assert.equal(second.isError, false);
+  assert.equal(second.structuredContent.delivery.page_offset, 1);
+  assert.equal(second.structuredContent.audit.geocode_requests, 1);
+  assert.equal(second.structuredContent.audit.poi_requests_used, 1);
+
+  const repeated = await session.request(4, "tools/call", {
+    name: "map-enumerate-nearby",
+    arguments: { next_cursor: nextCursor },
+  });
+  assert.deepEqual(repeated.structuredContent, second.structuredContent);
+
+  const legacy = await session.request(5, "tools/call", {
+    name: "map-enumerate-nearby",
+    arguments: { cursor: nextCursor },
+  });
+  assert.deepEqual(legacy.structuredContent, second.structuredContent);
+});
+
+test("MCP rejects address combined with a cursor instead of rescanning", async (t) => {
+  const session = startServer(t, { amapKey: "NOT_USED" });
+  await session.request(1, "initialize", {
+    protocolVersion: "2024-11-05",
+    capabilities: {},
+    clientInfo: { name: "eatrii-lab-test", version: "1.0.0" },
+  });
+  const result = await session.request(2, "tools/call", {
+    name: "map-enumerate-nearby",
+    arguments: { address: "深圳南山云科技大厦", next_cursor: "opaque" },
+  });
+
+  assert.equal(result.isError, true);
+  assert.equal(result.structuredContent.error.code, "INVALID_ARGUMENT");
+  assert.match(result.structuredContent.error.message, /address.*游标/);
+
+  const missing = await session.request(3, "tools/call", {
+    name: "map-enumerate-nearby",
+    arguments: {},
+  });
+  assert.equal(missing.isError, true);
+  assert.equal(missing.structuredContent.error.code, "INVALID_ARGUMENT");
+  assert.match(missing.structuredContent.error.message, /address.*next_cursor/);
 });

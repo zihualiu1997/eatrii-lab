@@ -16,7 +16,7 @@ Web
 web-search — Fast web search with grounded summaries + sources
 read-page — Read a specific webpage's full content
 search-image — Web image search (by text or reverse image)
-map-enumerate-nearby — Read-only Amap Web Service lookup that geocodes a specific address and enumerates dining POIs with pagination, adaptive spatial splitting, and cursor pages for large ledgers; requires AMAP_WEB_SERVICE_KEY
+map-enumerate-nearby — Read-only Amap Web Service lookup. First call: {address, city_hint, scene}. Continue large ledgers with {next_cursor: previous.delivery.next_cursor}; the deprecated {cursor: ...} alias remains temporarily compatible. Continuation never geocodes or calls Amap. Requires AMAP_WEB_SERVICE_KEY.
 Memory / skills / planning
 
 create-skill — Author/update personal reusable skills
